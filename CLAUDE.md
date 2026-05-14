@@ -26,7 +26,7 @@ Crucible-CI is a CI testing harness for the [Crucible](https://github.com/perfto
 - Actions are implemented as shell scripts (bash), invoked via `action.yml`
 - Commit messages use conventional format: `feat:`, `fix:`, etc.
 - The main branch should always be ready for user delivery
-- Workshop files: both `workshop.pl` (Perl) and `workshop.py` (Python) are valid
+- Workshop script is `workshop.py`
 
 ## Development Notes
 
