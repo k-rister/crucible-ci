@@ -479,16 +479,20 @@ case "${CI_RELEASE}" in
         for action in start stop; do
             for service in httpd opensearch valkey cdm-server image-sourcing; do
                 run_cmd "podman ps --all --external"
+                run_cmd "crucible ps"
 
                 run_cmd "crucible ${action} ${service}"
             done
         done
         run_cmd "podman ps --all --external"
+        run_cmd "crucible ps"
 
         run_cmd "crucible start all"
         run_cmd "podman ps --all --external"
+        run_cmd "crucible ps"
         run_cmd "crucible stop all"
         run_cmd "podman ps --all --external"
+        run_cmd "crucible ps"
         ;;
 esac
 
@@ -843,6 +847,14 @@ run_cmd "crucible log clear" "force"
 run_cmd "crucible log info" "force"
 
 run_cmd "podman ps --all --external" "force"
+case "${CI_RELEASE}" in
+    "2024.4"|"2025.1"|"2025.2"|"2025.3"|"2025.4"|"2026.1"|"2026.2")
+        echo "Skipping 'crucible ps' since it is not supported on the ${CI_RELEASE} release"
+        ;;
+    *)
+        run_cmd "crucible ps" "force"
+        ;;
+esac
 
 if [ "${CI_RUN_UPDATE}" == "yes" ]; then
     run_cmd "crucible update"
@@ -851,6 +863,14 @@ else
 fi
 
 run_cmd "do_ssh ${CI_ENDPOINT_USER}@${CI_ENDPOINT_HOST} podman images" "force"
+case "${CI_RELEASE}" in
+    "2024.4"|"2025.1"|"2025.2"|"2025.3"|"2025.4"|"2026.1"|"2026.2")
+        echo "Skipping 'crucible images' since it is not supported on the ${CI_RELEASE} release"
+        ;;
+    *)
+        run_cmd "crucible images" "force"
+        ;;
+esac
 
 case "${CI_ENDPOINT}" in
     k8s|kube)
