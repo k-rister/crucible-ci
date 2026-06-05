@@ -38,6 +38,7 @@ def main():
     with open(ci_config_file) as fh:
         config = json.load(fh)
 
+    endpoint_configs = config.get("endpoints", {})
     endpoints = set()
     if config["config"]["enabled"]:
         for benchmark in config["benchmarks"]:
@@ -46,7 +47,9 @@ def main():
                     for scenario in benchmark["scenarios"]:
                         if scenario["enabled"]:
                             for endpoint in scenario["endpoints"]:
-                                endpoints.add(endpoint)
+                                ep_config = endpoint_configs.get(endpoint, {})
+                                if ep_config.get("enabled", True):
+                                    endpoints.add(endpoint)
 
     result = sorted(endpoints)
 
