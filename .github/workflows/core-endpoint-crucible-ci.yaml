@@ -150,8 +150,6 @@ jobs:
       id: get-job-parameters
       uses: ./crucible-ci/.github/actions/get-job-parameters
       with:
-        runner-type: "github"
-        runner-tags: "k8s,kube,cpu-partitioning,remotehosts"
         runner-pool: ${{ inputs.runner_pool }}
         userenv-filter: ${{ inputs.userenv_filter }}
         endpoint: ${{ inputs.endpoint }}

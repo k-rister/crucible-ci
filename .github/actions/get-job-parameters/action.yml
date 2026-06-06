@@ -12,14 +12,15 @@ inputs:
     required: false
     default: "all"
   runner-type:
-    description: "What type of CI runner are the jobs for (github or self-hosted)?"
-    required: true
+    description: "Deprecated: ignored when capability-based config is used"
+    required: false
+    default: ""
   runner-tags:
-    description: "Comma separated list of tags the runner has"
+    description: "Deprecated: ignored when capability-based config is used"
     required: false
     default: ""
   runner-pool:
-    description: "Which pool of self-hosted runners to use (e.g., 'kmr-cloud-1', 'aws-cloud-1')"
+    description: "Which runner pool to use (e.g., 'aws-cloud-1')"
     required: false
     default: ""
   benchmark:
@@ -40,4 +41,4 @@ runs:
     - name: "Generate jobs list"
       id: generate-jobs
       shell: bash
-      run: TOOLBOX_HOME=${{ inputs.toolbox-directory }} ${{ inputs.rickshaw-directory }}/util/generate-ci-jobs.py --runner-type "${{ inputs.runner-type }}" --runner-tags "${{ inputs.runner-tags }}" --runner-pool "${{ inputs.runner-pool }}" --userenv-filter "${{ inputs.userenv-filter }}" --runtime-env "github" --benchmark "${{ inputs.benchmark }}" --endpoint "${{ inputs.endpoint }}"
+      run: TOOLBOX_HOME=${{ inputs.toolbox-directory }} ${{ inputs.rickshaw-directory }}/util/generate-ci-jobs.py --runner-pool "${{ inputs.runner-pool }}" --userenv-filter "${{ inputs.userenv-filter }}" --runtime-env "github" --benchmark "${{ inputs.benchmark }}" --endpoint "${{ inputs.endpoint }}"
