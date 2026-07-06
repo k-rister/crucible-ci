@@ -220,7 +220,7 @@ jobs:
       if: ${{ needs.gen-params.outputs.build_controller == 'yes' && env.ENGINE_REGISTRY_AUTH_SECRET != '' }}
       run: sudo bash -c "echo \"$ENGINE_REGISTRY_AUTH_SECRET\" > /root/crucible-production-engines-token.json"
 
-    - name: import quay oath token
+    - name: import quay oauth token
       env:
         QUAY_OAUTH_TOKEN: ${{ secrets.quay_oauth_token }}
       if: ${{ needs.gen-params.outputs.build_controller == 'yes' && env.QUAY_OAUTH_TOKEN != '' }}
