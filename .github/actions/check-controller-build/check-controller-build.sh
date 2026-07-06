@@ -75,7 +75,7 @@ else
             echo "Files changed:"
             ${diff_cmd}
             if [ $? != 0 ]; then
-                error "could not obtian git-diff output"
+                error "could not obtain git-diff output"
             fi
             echo
 

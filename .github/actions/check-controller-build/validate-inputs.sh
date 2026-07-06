@@ -19,7 +19,7 @@ function usage() {
     echo "<bypass-controller-build> is a yes|no value"
     echo "<force-controller-build> is a yes|no value"
     echo "<crucible> is a directory where the crucible repository exists."
-    echo "<workshop> is a directory where the workshop repoistory exists."
+    echo "<workshop> is a directory where the workshop repository exists."
     echo "<ci-target> is a directory where the current CI target repository exists."
     echo
     echo "If <bypass-controller-build> is 'yes' then the action short circuits and returns 'no'"

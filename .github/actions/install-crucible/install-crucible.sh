@@ -320,7 +320,7 @@ if [ "${CI_CONTROLLER}" == "yes" -a "${DISABLE_FORCE_BUILDS}" == "no" ]; then
     FORCE_BUILDS="true"
     echo "Updating rickshaw-settings value workshop.force-builds to '${FORCE_BUILDS}' in ${RICKSHAW_SETTINGS_FILE}"
 
-    # handle backwards copmatibility to when force_builds was a string
+    # handle backwards compatibility to when force_builds was a string
     # instead of a boolean
     jq_argument_type=argjson
     case "${RELEASE_TAG}" in
