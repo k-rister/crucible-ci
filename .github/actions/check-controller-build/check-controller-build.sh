@@ -123,8 +123,9 @@ else
             else
                 error "Required history not available for CI target directory '${ci_target_directory}'"
             fi
+            popd
         else
-            error "Failed to pushd to CI target directory '${ci_target_directory}"
+            error "Failed to pushd to CI target directory '${ci_target_directory}'"
         fi
     fi
 fi
