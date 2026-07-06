@@ -71,7 +71,7 @@ function validate_ci_endpoint {
 }
 
 function do_ssh {
-    ssh -o PasswordAuthentication=no $@
+    ssh -o PasswordAuthentication=no "$@"
 }
 
 # Run command on endpoint - use direct execution for localhost, SSH otherwise
