@@ -21,6 +21,7 @@ jobs:
         with:
           files: |
             LICENSE
+            .gitignore
             *.md
             **/*.md
             .github/rulesets/**
