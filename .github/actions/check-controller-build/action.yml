@@ -14,7 +14,7 @@ inputs:
     description: "Where is the workshop repository to check for workshop updates"
     required: true
   ci-target-directory:
-    descriptiopn: "Where is the current CI target repository to check for controller image related changes"
+    description: "Where is the current CI target repository to check for controller image related changes"
     required: true
 outputs:
   build-controller:

@@ -47,7 +47,7 @@ if pushd ${crucible_directory}; then
     else
         # history is not available
 
-        echo "INFO: Required history not availble, assuming no changes to installer script"
+        echo "INFO: Required history not available, assuming no changes to installer script"
     fi
 
     popd

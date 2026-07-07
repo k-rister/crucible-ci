@@ -376,7 +376,7 @@ function post_run_cmd {
         FORCE_BUILDS="false"
         echo "Updating rickshaw-settings value workshop.force-builds to '${FORCE_BUILDS}' in ${RICKSHAW_SETTINGS_FILE}"
 
-        # handle backwards copmatibility to when force_builds was a
+        # handle backwards compatibility to when force_builds was a
         # string instead of a boolean
         jq_argument_type=argjson
         case "${CI_RELEASE}" in

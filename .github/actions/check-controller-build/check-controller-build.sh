@@ -75,7 +75,7 @@ else
             echo "Files changed:"
             ${diff_cmd}
             if [ $? != 0 ]; then
-                error "could not obtian git-diff output"
+                error "could not obtain git-diff output"
             fi
             echo
 
@@ -123,8 +123,9 @@ else
             else
                 error "Required history not available for CI target directory '${ci_target_directory}'"
             fi
+            popd
         else
-            error "Failed to pushd to CI target directory '${ci_target_directory}"
+            error "Failed to pushd to CI target directory '${ci_target_directory}'"
         fi
     fi
 fi
