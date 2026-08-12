@@ -63,8 +63,18 @@ CI_PARAM_MODE="all"
 
 CI_RELEASE="upstream"
 
+# use a more detailed log-level than crucible's own default ("normal") for
+# every "crucible run" invocation below, so a CI failure has enough detail
+# (module/function/line-number annotated messages) to debug without needing
+# to reproduce it manually. Deliberately "debug", not "verbose-debug" --
+# the latter also cranks roadblock's own protocol tracing up to its most
+# verbose mode end-to-end, which is useful when actively chasing a
+# roadblock-specific issue but too noisy to run unconditionally on every CI
+# run.
+CI_LOG_LEVEL="debug"
+
 longopts="verbose,scenarios:,userenvs:,samples:,repeat-runs:,run-environment:,ci-endpoint:,ci-endpoint-host:,ci-endpoint-user:"
-longopts+=",ci-param-mode:,disable-update-test,ci-release:"
+longopts+=",ci-param-mode:,disable-update-test,ci-release:,ci-log-level:"
 opts=$(getopt -q -o "" --longoptions "${longopts}" -n "$0" -- "$@")
 if [ ${?} -ne 0 ]; then
     echo "ERROR: Unrecognized option specified: $@"
@@ -76,6 +86,11 @@ while true; do
         --ci-release)
             shift
             CI_RELEASE="${1}"
+            shift
+            ;;
+        --ci-log-level)
+            shift
+            CI_LOG_LEVEL="${1}"
             shift
             ;;
         --ci-param-mode)
@@ -146,6 +161,22 @@ done
 # validate inputs
 validate_ci_run_environment
 validate_ci_endpoint
+
+# --log-level on "crucible run" itself only landed in the 2026.3 release.
+# Only relevant to the "run-file" parameter mode below (--from-file), which
+# runs unconditionally across every release -- the "mv-params" legacy CLI
+# mode is separately restricted (CI_MV_PARAMS_SUPPORTED) to releases old
+# enough that --log-level was never a thing there in the first place, so
+# there is no point threading this through those call sites too.
+CI_LOG_LEVEL_ARG=""
+case "${CI_RELEASE}" in
+    "2024.4"|"2025.1"|"2025.2"|"2025.3"|"2025.4"|"2026.1"|"2026.2")
+        echo "Not adding --log-level to 'crucible run' invocations since it is not supported on the ${CI_RELEASE} release"
+        ;;
+    *)
+        CI_LOG_LEVEL_ARG="--log-level ${CI_LOG_LEVEL}"
+        ;;
+esac
 
 for scenario in $(echo "${CI_SCENARIOS}" | sed -e "s/,/ /g"); do
     case "${scenario}" in
@@ -822,7 +853,7 @@ for userenv in ${CI_ACTIVE_USERENVS}; do
             )
             cmd="${cmd[@]}"
             run_cmd "${cmd}"
-            run_cmd "crucible run --from-file ${CI_RUN_FILE}"
+            run_cmd "crucible run --from-file ${CI_RUN_FILE} ${CI_LOG_LEVEL_ARG}"
             post_run_cmd
 
             if [ "${CI_REPEAT_RUNS}" == "yes" ]; then
@@ -850,7 +881,7 @@ for userenv in ${CI_ACTIVE_USERENVS}; do
                 )
                 cmd="${cmd[@]}"
                 run_cmd "${cmd}"
-                run_cmd "crucible run --from-file ${CI_RUN_FILE}"
+                run_cmd "crucible run --from-file ${CI_RUN_FILE} ${CI_LOG_LEVEL_ARG}"
                 post_run_cmd
             fi
         fi
