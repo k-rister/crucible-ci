@@ -371,6 +371,14 @@ function post_run_cmd {
                     # case where --aggregation is silently ignored server-side
                     aggregation_base_query="crucible get metric --run ${run_id} --period ${period_id} --source mpstat --type Busy-CPU --breakout cstype,csid --output-format json"
 
+                    # reset per-attempt so a prior period's values can never
+                    # leak into this period's consistency check
+                    aggregation_default_value=""
+                    aggregation_sum_value=""
+                    aggregation_avg_value=""
+                    aggregation_max_value=""
+                    aggregation_min_value=""
+
                     run_and_capture_cmd "${aggregation_base_query}"
                     if [ ${RC_STATUS} == 0 ]; then
                         aggregation_default_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
@@ -396,16 +404,20 @@ function post_run_cmd {
                         aggregation_min_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
                     fi
 
-                    if [ -n "${aggregation_default_value}" ] && [ -n "${aggregation_sum_value}" ] && [ -n "${aggregation_avg_value}" ] \
-                        && [ -n "${aggregation_max_value}" ] && [ -n "${aggregation_min_value}" ] \
-                        && awk -v a="${aggregation_default_value}" -v b="${aggregation_sum_value}" 'BEGIN { exit !(a == b) }' \
-                        && awk -v a="${aggregation_min_value}" -v b="${aggregation_avg_value}" 'BEGIN { exit !(a <= b) }' \
-                        && awk -v a="${aggregation_avg_value}" -v b="${aggregation_max_value}" 'BEGIN { exit !(a <= b) }' \
-                        && awk -v a="${aggregation_sum_value}" -v b="${aggregation_avg_value}" 'BEGIN { exit !(a != b) }'; then
-                        echo "--aggregation override verified: default=${aggregation_default_value} sum=${aggregation_sum_value} avg=${aggregation_avg_value} min=${aggregation_min_value} max=${aggregation_max_value}"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        if [ -n "${aggregation_default_value}" ] && [ -n "${aggregation_sum_value}" ] && [ -n "${aggregation_avg_value}" ] \
+                            && [ -n "${aggregation_max_value}" ] && [ -n "${aggregation_min_value}" ] \
+                            && awk -v a="${aggregation_default_value}" -v b="${aggregation_sum_value}" 'BEGIN { exit !(a == b) }' \
+                            && awk -v a="${aggregation_min_value}" -v b="${aggregation_avg_value}" 'BEGIN { exit !(a <= b) }' \
+                            && awk -v a="${aggregation_avg_value}" -v b="${aggregation_max_value}" 'BEGIN { exit !(a <= b) }' \
+                            && awk -v a="${aggregation_sum_value}" -v b="${aggregation_avg_value}" 'BEGIN { exit !(a != b) }'; then
+                            echo "--aggregation override verified: default=${aggregation_default_value} sum=${aggregation_sum_value} avg=${aggregation_avg_value} min=${aggregation_min_value} max=${aggregation_max_value}"
+                        else
+                            echo "ERROR: --aggregation override produced inconsistent results: default=${aggregation_default_value} sum=${aggregation_sum_value} avg=${aggregation_avg_value} min=${aggregation_min_value} max=${aggregation_max_value}"
+                            RC_STATUS=1
+                        fi
                     else
-                        echo "ERROR: --aggregation override produced inconsistent results: default=${aggregation_default_value} sum=${aggregation_sum_value} avg=${aggregation_avg_value} min=${aggregation_min_value} max=${aggregation_max_value}"
-                        RC_STATUS=1
+                        echo "Skipping --aggregation override verification since an earlier command in this period already failed"
                     fi
                     ;;
             esac
