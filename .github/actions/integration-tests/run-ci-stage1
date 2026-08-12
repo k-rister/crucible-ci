@@ -853,7 +853,7 @@ for userenv in ${CI_ACTIVE_USERENVS}; do
             )
             cmd="${cmd[@]}"
             run_cmd "${cmd}"
-            run_cmd "crucible run --from-file ${CI_RUN_FILE} ${CI_LOG_LEVEL_ARG}"
+            run_cmd "crucible run ${CI_RUN_FILE} ${CI_LOG_LEVEL_ARG}"
             post_run_cmd
 
             if [ "${CI_REPEAT_RUNS}" == "yes" ]; then
@@ -881,7 +881,7 @@ for userenv in ${CI_ACTIVE_USERENVS}; do
                 )
                 cmd="${cmd[@]}"
                 run_cmd "${cmd}"
-                run_cmd "crucible run --from-file ${CI_RUN_FILE} ${CI_LOG_LEVEL_ARG}"
+                run_cmd "crucible run ${CI_RUN_FILE} ${CI_LOG_LEVEL_ARG}"
                 post_run_cmd
             fi
         fi
