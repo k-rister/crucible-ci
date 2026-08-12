@@ -451,6 +451,48 @@ case "${CI_RELEASE}" in
         ;;
 esac
 
+case "${CI_RELEASE}" in
+    "2024.4"|"2025.1"|"2025.2"|"2025.3"|"2025.4"|"2026.1"|"2026.2"|"2026.3")
+        echo "Skipping 'crucible tools list' and 'crucible benchmarks list' since they are not supported on the ${CI_RELEASE} release"
+        ;;
+    *)
+        run_cmd "crucible tools list"
+        run_cmd "crucible tools list --format table"
+        run_cmd "crucible tools list --format json"
+        run_cmd "crucible tools list --name forkstat"
+        run_cmd "crucible benchmarks list"
+        run_cmd "crucible benchmarks list --format table"
+        run_cmd "crucible benchmarks list --format json"
+        run_cmd "crucible benchmarks list --name fio"
+
+        # exit-code checks above only prove the commands didn't crash --
+        # also confirm the JSON output is well-formed and non-empty, since
+        # a broken aggregation could otherwise silently return `{"tools":
+        # []}` and still exit 0
+        run_and_capture_cmd "crucible tools list --format json"
+        if [ ${RC_STATUS} == 0 ]; then
+            tools_count=$(echo "${captured_output}" | jq '.tools | length' 2>/dev/null)
+            if [ -n "${tools_count}" ] && [ "${tools_count}" -gt 0 ] 2>/dev/null; then
+                echo "crucible tools list --format json returned ${tools_count} tool(s)"
+            else
+                echo "ERROR: crucible tools list --format json returned no tools, or the output was not valid JSON"
+                RC_STATUS=1
+            fi
+        fi
+
+        run_and_capture_cmd "crucible benchmarks list --format json"
+        if [ ${RC_STATUS} == 0 ]; then
+            benchmarks_count=$(echo "${captured_output}" | jq '.benchmarks | length' 2>/dev/null)
+            if [ -n "${benchmarks_count}" ] && [ "${benchmarks_count}" -gt 0 ] 2>/dev/null; then
+                echo "crucible benchmarks list --format json returned ${benchmarks_count} benchmark(s)"
+            else
+                echo "ERROR: crucible benchmarks list --format json returned no benchmarks, or the output was not valid JSON"
+                RC_STATUS=1
+            fi
+        fi
+        ;;
+esac
+
 run_cmd "crucible repo info"
 
 run_cmd "crucible repo config show"
