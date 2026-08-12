@@ -323,6 +323,62 @@ function post_run_cmd {
             query+=",num,type"
             run_cmd "${query}"
 
+            case "${CI_RELEASE}" in
+                "2024.4"|"2025.1"|"2025.2"|"2025.3"|"2025.4"|"2026.1"|"2026.2"|"2026.3")
+                    echo "Skipping --aggregation override verification since it is not supported on the ${CI_RELEASE} release"
+                    ;;
+                *)
+                    # mpstat/Busy-CPU's stored default-aggregation is "sum", so
+                    # omitting --aggregation must reproduce the same value as
+                    # explicitly requesting it. min <= avg <= max is a
+                    # mathematical property of a weighted average that holds
+                    # regardless of the underlying data -- but it also holds
+                    # trivially if all four values happen to be identical, so
+                    # additionally require sum != avg (sum == avg * numMetricIds,
+                    # and Busy-CPU always folds 7 subtypes into this breakout,
+                    # so numMetricIds > 1 in practice) to actually catch the
+                    # case where --aggregation is silently ignored server-side
+                    aggregation_base_query="crucible get metric --run ${run_id} --period ${period_id} --source mpstat --type Busy-CPU --breakout cstype,csid --output-format json"
+
+                    run_and_capture_cmd "${aggregation_base_query}"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_default_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    run_and_capture_cmd "${aggregation_base_query} --aggregation sum"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_sum_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    run_and_capture_cmd "${aggregation_base_query} --aggregation avg"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_avg_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    run_and_capture_cmd "${aggregation_base_query} --aggregation max"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_max_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    run_and_capture_cmd "${aggregation_base_query} --aggregation min"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_min_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    if [ -n "${aggregation_default_value}" ] && [ -n "${aggregation_sum_value}" ] && [ -n "${aggregation_avg_value}" ] \
+                        && [ -n "${aggregation_max_value}" ] && [ -n "${aggregation_min_value}" ] \
+                        && awk -v a="${aggregation_default_value}" -v b="${aggregation_sum_value}" 'BEGIN { exit !(a == b) }' \
+                        && awk -v a="${aggregation_min_value}" -v b="${aggregation_avg_value}" 'BEGIN { exit !(a <= b) }' \
+                        && awk -v a="${aggregation_avg_value}" -v b="${aggregation_max_value}" 'BEGIN { exit !(a <= b) }' \
+                        && awk -v a="${aggregation_sum_value}" -v b="${aggregation_avg_value}" 'BEGIN { exit !(a != b) }'; then
+                        echo "--aggregation override verified: default=${aggregation_default_value} sum=${aggregation_sum_value} avg=${aggregation_avg_value} min=${aggregation_min_value} max=${aggregation_max_value}"
+                    else
+                        echo "ERROR: --aggregation override produced inconsistent results: default=${aggregation_default_value} sum=${aggregation_sum_value} avg=${aggregation_avg_value} min=${aggregation_min_value} max=${aggregation_max_value}"
+                        RC_STATUS=1
+                    fi
+                    ;;
+            esac
+
             query="crucible get metric --run ${run_id} --period ${period_id} --source procstat --type interrupts-sec --breakout cstype,csid"
             run_cmd "${query}"
             query+=",irq,type,cpu"
