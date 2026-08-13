@@ -63,8 +63,18 @@ CI_PARAM_MODE="all"
 
 CI_RELEASE="upstream"
 
+# use a more detailed log-level than crucible's own default ("normal") for
+# every "crucible run" invocation below, so a CI failure has enough detail
+# (module/function/line-number annotated messages) to debug without needing
+# to reproduce it manually. Deliberately "debug", not "verbose-debug" --
+# the latter also cranks roadblock's own protocol tracing up to its most
+# verbose mode end-to-end, which is useful when actively chasing a
+# roadblock-specific issue but too noisy to run unconditionally on every CI
+# run.
+CI_LOG_LEVEL="debug"
+
 longopts="verbose,scenarios:,userenvs:,samples:,repeat-runs:,run-environment:,ci-endpoint:,ci-endpoint-host:,ci-endpoint-user:"
-longopts+=",ci-param-mode:,disable-update-test,ci-release:"
+longopts+=",ci-param-mode:,disable-update-test,ci-release:,ci-log-level:"
 opts=$(getopt -q -o "" --longoptions "${longopts}" -n "$0" -- "$@")
 if [ ${?} -ne 0 ]; then
     echo "ERROR: Unrecognized option specified: $@"
@@ -76,6 +86,11 @@ while true; do
         --ci-release)
             shift
             CI_RELEASE="${1}"
+            shift
+            ;;
+        --ci-log-level)
+            shift
+            CI_LOG_LEVEL="${1}"
             shift
             ;;
         --ci-param-mode)
@@ -146,6 +161,22 @@ done
 # validate inputs
 validate_ci_run_environment
 validate_ci_endpoint
+
+# --log-level on "crucible run" itself only landed in the 2026.3 release.
+# Only relevant to the "run-file" parameter mode below (--from-file), which
+# runs unconditionally across every release -- the "mv-params" legacy CLI
+# mode is separately restricted (CI_MV_PARAMS_SUPPORTED) to releases old
+# enough that --log-level was never a thing there in the first place, so
+# there is no point threading this through those call sites too.
+CI_LOG_LEVEL_ARG=""
+case "${CI_RELEASE}" in
+    "2024.4"|"2025.1"|"2025.2"|"2025.3"|"2025.4"|"2026.1"|"2026.2")
+        echo "Not adding --log-level to 'crucible run' invocations since it is not supported on the ${CI_RELEASE} release"
+        ;;
+    *)
+        CI_LOG_LEVEL_ARG="--log-level ${CI_LOG_LEVEL}"
+        ;;
+esac
 
 for scenario in $(echo "${CI_SCENARIOS}" | sed -e "s/,/ /g"); do
     case "${scenario}" in
@@ -323,6 +354,74 @@ function post_run_cmd {
             query+=",num,type"
             run_cmd "${query}"
 
+            case "${CI_RELEASE}" in
+                "2024.4"|"2025.1"|"2025.2"|"2025.3"|"2025.4"|"2026.1"|"2026.2"|"2026.3")
+                    echo "Skipping --aggregation override verification since it is not supported on the ${CI_RELEASE} release"
+                    ;;
+                *)
+                    # mpstat/Busy-CPU's stored default-aggregation is "sum", so
+                    # omitting --aggregation must reproduce the same value as
+                    # explicitly requesting it. min <= avg <= max is a
+                    # mathematical property of a weighted average that holds
+                    # regardless of the underlying data -- but it also holds
+                    # trivially if all four values happen to be identical, so
+                    # additionally require sum != avg (sum == avg * numMetricIds,
+                    # and Busy-CPU always folds 7 subtypes into this breakout,
+                    # so numMetricIds > 1 in practice) to actually catch the
+                    # case where --aggregation is silently ignored server-side
+                    aggregation_base_query="crucible get metric --run ${run_id} --period ${period_id} --source mpstat --type Busy-CPU --breakout cstype,csid --output-format json"
+
+                    # reset per-attempt so a prior period's values can never
+                    # leak into this period's consistency check
+                    aggregation_default_value=""
+                    aggregation_sum_value=""
+                    aggregation_avg_value=""
+                    aggregation_max_value=""
+                    aggregation_min_value=""
+
+                    run_and_capture_cmd "${aggregation_base_query}"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_default_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    run_and_capture_cmd "${aggregation_base_query} --aggregation sum"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_sum_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    run_and_capture_cmd "${aggregation_base_query} --aggregation avg"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_avg_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    run_and_capture_cmd "${aggregation_base_query} --aggregation max"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_max_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    run_and_capture_cmd "${aggregation_base_query} --aggregation min"
+                    if [ ${RC_STATUS} == 0 ]; then
+                        aggregation_min_value=$(echo "${captured_output}" | sed -n '/^{/,$p' | jq '.values | to_entries[0].value[0].value' 2>/dev/null)
+                    fi
+
+                    if [ ${RC_STATUS} == 0 ]; then
+                        if [ -n "${aggregation_default_value}" ] && [ -n "${aggregation_sum_value}" ] && [ -n "${aggregation_avg_value}" ] \
+                            && [ -n "${aggregation_max_value}" ] && [ -n "${aggregation_min_value}" ] \
+                            && awk -v a="${aggregation_default_value}" -v b="${aggregation_sum_value}" 'BEGIN { exit !(a == b) }' \
+                            && awk -v a="${aggregation_min_value}" -v b="${aggregation_avg_value}" 'BEGIN { exit !(a <= b) }' \
+                            && awk -v a="${aggregation_avg_value}" -v b="${aggregation_max_value}" 'BEGIN { exit !(a <= b) }' \
+                            && awk -v a="${aggregation_sum_value}" -v b="${aggregation_avg_value}" 'BEGIN { exit !(a != b) }'; then
+                            echo "--aggregation override verified: default=${aggregation_default_value} sum=${aggregation_sum_value} avg=${aggregation_avg_value} min=${aggregation_min_value} max=${aggregation_max_value}"
+                        else
+                            echo "ERROR: --aggregation override produced inconsistent results: default=${aggregation_default_value} sum=${aggregation_sum_value} avg=${aggregation_avg_value} min=${aggregation_min_value} max=${aggregation_max_value}"
+                            RC_STATUS=1
+                        fi
+                    else
+                        echo "Skipping --aggregation override verification since an earlier command in this period already failed"
+                    fi
+                    ;;
+            esac
+
             query="crucible get metric --run ${run_id} --period ${period_id} --source procstat --type interrupts-sec --breakout cstype,csid"
             run_cmd "${query}"
             query+=",irq,type,cpu"
@@ -448,6 +547,48 @@ case "${CI_RELEASE}" in
         run_cmd "crucible userenvs list --deprecated"
         run_cmd "crucible userenvs list --official --external --deprecated"
         run_cmd "crucible userenvs help"
+        ;;
+esac
+
+case "${CI_RELEASE}" in
+    "2024.4"|"2025.1"|"2025.2"|"2025.3"|"2025.4"|"2026.1"|"2026.2"|"2026.3")
+        echo "Skipping 'crucible tools list' and 'crucible benchmarks list' since they are not supported on the ${CI_RELEASE} release"
+        ;;
+    *)
+        run_cmd "crucible tools list"
+        run_cmd "crucible tools list --format table"
+        run_cmd "crucible tools list --format json"
+        run_cmd "crucible tools list --name forkstat"
+        run_cmd "crucible benchmarks list"
+        run_cmd "crucible benchmarks list --format table"
+        run_cmd "crucible benchmarks list --format json"
+        run_cmd "crucible benchmarks list --name fio"
+
+        # exit-code checks above only prove the commands didn't crash --
+        # also confirm the JSON output is well-formed and non-empty, since
+        # a broken aggregation could otherwise silently return `{"tools":
+        # []}` and still exit 0
+        run_and_capture_cmd "crucible tools list --format json"
+        if [ ${RC_STATUS} == 0 ]; then
+            tools_count=$(echo "${captured_output}" | jq '.tools | length' 2>/dev/null)
+            if [ -n "${tools_count}" ] && [ "${tools_count}" -gt 0 ] 2>/dev/null; then
+                echo "crucible tools list --format json returned ${tools_count} tool(s)"
+            else
+                echo "ERROR: crucible tools list --format json returned no tools, or the output was not valid JSON"
+                RC_STATUS=1
+            fi
+        fi
+
+        run_and_capture_cmd "crucible benchmarks list --format json"
+        if [ ${RC_STATUS} == 0 ]; then
+            benchmarks_count=$(echo "${captured_output}" | jq '.benchmarks | length' 2>/dev/null)
+            if [ -n "${benchmarks_count}" ] && [ "${benchmarks_count}" -gt 0 ] 2>/dev/null; then
+                echo "crucible benchmarks list --format json returned ${benchmarks_count} benchmark(s)"
+            else
+                echo "ERROR: crucible benchmarks list --format json returned no benchmarks, or the output was not valid JSON"
+                RC_STATUS=1
+            fi
+        fi
         ;;
 esac
 
@@ -724,7 +865,7 @@ for userenv in ${CI_ACTIVE_USERENVS}; do
             )
             cmd="${cmd[@]}"
             run_cmd "${cmd}"
-            run_cmd "crucible run --from-file ${CI_RUN_FILE}"
+            run_cmd "crucible run ${CI_RUN_FILE} ${CI_LOG_LEVEL_ARG}"
             post_run_cmd
 
             if [ "${CI_REPEAT_RUNS}" == "yes" ]; then
@@ -752,7 +893,7 @@ for userenv in ${CI_ACTIVE_USERENVS}; do
                 )
                 cmd="${cmd[@]}"
                 run_cmd "${cmd}"
-                run_cmd "crucible run --from-file ${CI_RUN_FILE}"
+                run_cmd "crucible run ${CI_RUN_FILE} ${CI_LOG_LEVEL_ARG}"
                 post_run_cmd
             fi
         fi
